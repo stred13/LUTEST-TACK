@@ -7,8 +7,11 @@ Pham Trong Kim - kim.t.pham@tuni.fi</br>
 Nguyen Thi Thien An - an.nguyen.1@student.lut.fi</br>
 Nguyen Thanh Trung - trung.th.nguyen@student.lut.fi</br>
 
-### 🔗 Project  Repository Link
-
+### 🔗 Project  Repository Link</br>
+demo link: https://youtu.be/R9E7aLJyIzk
+</br>
+project repo: https://github.com/stred13/LUTEST-TACK.git
+</br>
 ### 📝 Project Description:
  This is a smart trash bin that combines touchless lid control, automatic fill-level monitoring, and a web dashboard. The lid opens without being touched and closes again on its own, so users never need to handle a dirty lid or pedal. While the bin is in use, it automatically measures how full it is and keeps track of its condition over time.
 
