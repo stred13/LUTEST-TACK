@@ -14,7 +14,7 @@ Nguyen Thanh Trung - trung.th.nguyen@student.lut.fi</br>
 
 ### ⚙️ Tech Stack Used:
 Hardware:</br>
-    </t>Arduino Uno R4 WiFi ARD-23292</br>
+    <pre>Arduino Uno R4 WiFi ARD-23292</br>
     </t>Ultrasonic Distance Sensor HCSR04 MOD-01420</br>
     </t>Micro Servo SG-90 (180°) DNG-13128</br>
     </t>justPi Dupont Jumper Cables (MM, M-F, F-F)</br>
