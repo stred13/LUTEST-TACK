@@ -15,9 +15,9 @@ Nguyen Thanh Trung - trung.th.nguyen@student.lut.fi</br>
 ### ⚙️ Tech Stack Used:
 Hardware:</br>
     <pre>Arduino Uno R4 WiFi ARD-23292</br>
-    </t>Ultrasonic Distance Sensor HCSR04 MOD-01420</br>
-    </t>Micro Servo SG-90 (180°) DNG-13128</br>
-    </t>justPi Dupont Jumper Cables (MM, M-F, F-F)</br>
-    </t>Breadboard justPi (400 holes)</br>
+    Ultrasonic Distance Sensor HCSR04 MOD-01420</br>
+    Micro Servo SG-90 (180°) DNG-13128</br>
+    justPi Dupont Jumper Cables (MM, M-F, F-F)</br>
+    Breadboard justPi (400 holes)</br></pre>
 Software: </br>
-    </t>C++, javascript, Servo.h library
+    <pre>C++, javascript, Servo.h library</pre>
