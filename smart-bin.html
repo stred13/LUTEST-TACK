@@ -63,12 +63,21 @@ pre{margin:8px 0 0;height:140px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,C
     <span>⚠</span><span id="warningText">Trash is over the limit — please empty the bin.</span>
   </div>
 
+  <div class="banner hidden" id="openWarning">
+    <span>⚠</span><span id="openWarningText"></span>
+  </div>
+
+  <div class="banner hidden" id="ageWarning">
+    <span>⚠</span><span id="ageWarningText"></span>
+  </div>
+
   <div class="grid">
     <!-- Lid -->
     <div class="card">
       <h2>Lid</h2>
       <div class="big-value lid-state" id="lidState">–</div>
       <div class="sub" id="lidReason">Waiting for data</div>
+      <div class="sub" id="lidOpenFor"></div>
       <div class="row" style="margin-top:14px">
         <button class="big" id="openBtn" disabled>Open lid</button>
         <button class="secondary" id="closeBtn" disabled>Close</button>
@@ -76,7 +85,7 @@ pre{margin:8px 0 0;height:140px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,C
     </div>
 
     <!-- Hand sensor -->
-    <div class="card">
+    <div class="card" hidden>
       <h2>Hand sensor</h2>
       <div class="big-value" id="handVal">–</div>
       <div class="sub" style="margin-top:8px"><span class="pill" id="handPill">No hand</span></div>
@@ -92,6 +101,7 @@ pre{margin:8px 0 0;height:140px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,C
           <div class="big-value" id="fillPct">–</div>
           <div class="sub" id="fillCm">Trash surface: – cm from sensor</div>
           <div class="sub">Limit: <span id="limitTxt">80</span>%</div>
+          <div class="sub" id="wasteAge">Waste age: –</div>
         </div>
       </div>
     </div>
@@ -116,6 +126,21 @@ pre{margin:8px 0 0;height:140px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,C
       <div class="row">
         <input type="number" id="handInput" min="3" max="100" value="20"> cm
       </div>
+    </div>
+    <div class="setting">
+      <label>Lid open warning</label>
+      <div class="row">
+        <input type="number" id="openWarnInput" min="0.1" max="120" step="0.5" placeholder="e.g. 2" value="1"> minutes
+      </div>
+      <div class="sub">Shows a warning when the lid stays open longer than this. Leave empty to turn off.</div>
+    </div>
+    <div class="setting">
+      <label>Waste age warning</label>
+      <div class="row">
+        <input type="number" id="ageMinInput" min="0" max="100000" step="any" placeholder="e.g. 5"> minutes
+        <button class="secondary" id="emptiedBtn">Mark bin as emptied</button>
+      </div>
+      <div class="sub">Shows a warning when waste has stayed in the bin longer than this. The timer starts when waste is first detected and resets automatically when the bin is emptied. Leave empty to turn off.</div>
     </div>
     <details>
       <summary>Raw serial data</summary>
@@ -163,8 +188,61 @@ $('calibrateBtn').onclick = () => {
   } else log('Calibration failed: no valid fill reading');
 };
 
+/* ---------- lid open too long (not preset, not saved) ---------- */
+let openWarnMin = null;
+$('openWarnInput').oninput = e => {
+  const v = parseFloat(e.target.value);
+  openWarnMin = (!isNaN(v) && v > 0 && v <= 120) ? v : null;
+  render();
+};
+
+function fmtDuration(ms) {
+  const s = Math.floor(ms / 1000), m = Math.floor(s / 60);
+  return m > 0 ? `${m} min ${s % 60} s` : `${s} s`;
+}
+
+/* ---------- waste age (how long waste has stayed in the bin) ----------
+   Saved in the browser so it survives page reloads over several days. */
+const EMPTY_PCT = 15;        // at or below this % the bin counts as empty (sensor noise margin)
+const STABLE_READINGS = 10; // readings in a row needed before starting/resetting (ignores glitches)
+let wasteSince = null, wasteYes = 0, wasteNo = 0;
+try { const v = parseInt(localStorage.getItem('binWasteSince')); if (v > 0) wasteSince = v; } catch (e) {}
+function saveWasteSince() {
+  try { wasteSince ? localStorage.setItem('binWasteSince', wasteSince) : localStorage.removeItem('binWasteSince'); } catch (e) {}
+}
+
+$('ageMinInput').value = settings.ageMin ?? '';
+$('ageMinInput').oninput = e => {
+  const v = parseFloat(e.target.value);
+  settings.ageMin = (!isNaN(v) && v > 0 && v <= 100000) ? v : null;
+  saveSettings(); render();
+};
+$('emptiedBtn').onclick = () => {
+  wasteSince = null; wasteYes = 0; wasteNo = 0; saveWasteSince();
+  log('Waste timer reset (bin marked as emptied)');
+  render();
+};
+
+// Called with each valid fill percentage
+function trackWaste(pct) {
+  if (pct > EMPTY_PCT) { wasteYes++; wasteNo = 0; } else { wasteNo++; wasteYes = 0; }
+  if (wasteSince === null && wasteYes >= STABLE_READINGS) {
+    wasteSince = Date.now(); saveWasteSince(); log('Waste detected — timer started');
+  } else if (wasteSince !== null && wasteNo >= STABLE_READINGS) {
+    wasteSince = null; saveWasteSince(); log('Bin emptied — timer reset');
+  }
+}
+
+function fmtAge(ms) {
+  const min = Math.floor(ms / 60000), h = Math.floor(min / 60), d = Math.floor(h / 24);
+  if (d > 0) return `${d} d ${h % 24} h`;
+  if (h > 0) return `${h} h ${min % 60} min`;
+  if (min > 0) return `${min} min`;
+  return `${Math.floor(ms / 1000)} s`;
+}
+
 /* ---------- state + rendering ---------- */
-const state = { hand: -1, fill: -1, lid: null, manual: false };
+const state = { hand: -1, fill: -1, lid: null, manual: false, lidOpenSince: null };
 
 function render() {
   // Lid
@@ -195,7 +273,26 @@ function render() {
   // Warning
   $('warning').classList.toggle('hidden', !over);
   if (over) $('warningText').textContent = `Trash is over the limit (${Math.round(pct)}% ≥ ${settings.limit}%) — please empty the bin.`;
-  document.title = over ? '⚠ Bin full — Smart Trash Bin' : 'Smart Trash Bin';
+
+  // Lid open too long
+  const openFor = state.lid && state.lidOpenSince !== null ? Date.now() - state.lidOpenSince : null;
+  $('lidOpenFor').textContent = openFor !== null ? `Open for ${fmtDuration(openFor)}` : '';
+  const openTooLong = openFor !== null && openWarnMin !== null && openFor >= openWarnMin * 60000;
+  $('openWarning').classList.toggle('hidden', !openTooLong);
+  if (openTooLong) $('openWarningText').textContent =
+    `Lid has been open for ${fmtDuration(openFor)} (limit ${openWarnMin} min) — please close it.`;
+
+  // Waste age
+  const age = wasteSince !== null ? Date.now() - wasteSince : null;
+  $('wasteAge').textContent = age !== null ? `Waste in bin for: ${fmtAge(age)}` : 'Waste age: bin empty';
+  const tooOld = age !== null && settings.ageMin != null && age >= settings.ageMin * 60000;
+  $('ageWarning').classList.toggle('hidden', !tooOld);
+  if (tooOld) $('ageWarningText').textContent =
+    `Waste has stayed in the bin for ${fmtAge(age)} (limit ${settings.ageMin} min) — please empty the bin.`;
+
+  document.title = over ? '⚠ Bin full — Smart Trash Bin'
+    : tooOld ? '⚠ Old waste — Smart Trash Bin'
+    : openTooLong ? '⚠ Lid open — Smart Trash Bin' : 'Smart Trash Bin';
 }
 
 /* ---------- serial ---------- */
@@ -231,7 +328,13 @@ function handleLine(line) {
   //const hand = parseFloat(p[0]), fill = parseFloat(p[1]);
   if ([hand, fill].some(isNaN)) return;
   if (!lid) state.manual = false;
+  if (lid && !state.lid) state.lidOpenSince = Date.now();   // lid just opened: start timing
+  if (!lid) state.lidOpenSince = null;
   Object.assign(state, { hand, fill, lid });
+  // Track waste age only from real readings taken with the lid closed
+  if (!lid && fill > 0 && settings.depth > 0) {
+    trackWaste(Math.max(0, Math.min(100, (settings.depth - fill) / settings.depth * 100)));
+  }
   render();
 }
 
@@ -265,6 +368,7 @@ async function readLoop() {
   }
   try { await port.close(); } catch (e) {}
   port = null; setConnected(false); log('--- disconnected ---');
+  state.lid = null; state.lidOpenSince = null; render();
 }
 
 async function disconnect() { keepReading = false; if (reader) { try { await reader.cancel(); } catch (e) {} } }
@@ -276,6 +380,7 @@ $('closeBtn').onclick = () => send('C');
 if ('serial' in navigator) navigator.serial.addEventListener('disconnect', e => { if (e.target === port) disconnect(); });
 
 applySettingsUI();
+setInterval(() => { if (state.lid || wasteSince !== null) render(); }, 1000);   // keep timers ticking
 </script>
 </body>
 </html>
