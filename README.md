@@ -8,7 +8,7 @@ Nguyen Thi Thien An - an.nguyen.1@student.lut.fi</br>
 Nguyen Thanh Trung - trung.th.nguyen@student.lut.fi</br>
 
 ### 🔗 Project  Repository Link</br>
-demo link: https://youtu.be/R9E7aLJyIzk
+demo link: https://youtu.be/Ak2jeczu2Dc
 </br>
 project repo: https://github.com/stred13/LUTEST-TACK.git
 </br>
