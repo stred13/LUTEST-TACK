@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Smart Trash Bin</title>
+<style>
+:root{--bg:#f4f6f5;--card:#fff;--text:#18201c;--muted:#6b756f;--border:#e1e6e3;--accent:#15803d;--accent-soft:#dcfce7;--warn:#dc2626;--warn-soft:#fee2e2;--fill:#65a30d;--track:#eef1ef}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1311;--card:#171c19;--text:#e6ece8;--muted:#98a39c;--border:#26302b;--accent:#22c55e;--accent-soft:#14301f;--warn:#f87171;--warn-soft:#3a1717;--fill:#84cc16;--track:#202722}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:960px;margin:0 auto;padding:24px 16px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px}
+h1{font-size:20px;margin:0}
+h2{font-size:13px;font-weight:500;color:var(--muted);margin:0 0 8px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.status{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:14px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.dot.on{background:var(--accent)}
+button{font:inherit;padding:9px 16px;border-radius:8px;border:1px solid var(--text);background:var(--text);color:var(--bg);cursor:pointer}
+button.secondary{background:transparent;color:var(--text);border-color:var(--border)}
+button.big{padding:14px 20px;font-size:16px;font-weight:600;background:var(--accent);border-color:var(--accent);color:#fff;flex:1}
+button:disabled{opacity:.45;cursor:not-allowed}
+.hidden{display:none!important}
+.banner{display:flex;gap:10px;align-items:center;background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn);border-radius:12px;padding:12px 16px;margin-bottom:16px;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.big-value{font-size:36px;font-weight:650;line-height:1.15;font-variant-numeric:tabular-nums}
+.big-value small{font-size:16px;color:var(--muted);font-weight:400}
+.sub{font-size:13px;color:var(--muted);margin-top:2px}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px;background:var(--track);color:var(--muted)}
+.pill.on{background:var(--accent-soft);color:var(--accent)}
+.lid-state.open{color:var(--accent)}
+.fill-wrap{display:flex;gap:18px;align-items:flex-end}
+.bin{position:relative;width:70px;height:120px;border:3px solid var(--text);border-top:none;border-radius:0 0 10px 10px;background:var(--track);overflow:hidden;flex-shrink:0}
+.bin .level{position:absolute;left:0;right:0;bottom:0;background:var(--fill);transition:height .4s,background .3s}
+.bin .level.over{background:var(--warn)}
+.bin .limit{position:absolute;left:-2px;right:-2px;border-top:2px dashed var(--warn)}
+label{display:block;font-size:14px;margin-bottom:6px}
+.setting{margin-bottom:16px}
+.setting:last-child{margin-bottom:0}
+input[type=range]{width:100%;accent-color:var(--accent)}
+input[type=number]{font:inherit;width:90px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text)}
+.val{font-weight:600;font-variant-numeric:tabular-nums}
+details{margin-top:12px}
+summary{cursor:pointer;color:var(--muted);font-size:13px}
+pre{margin:8px 0 0;height:140px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--muted);white-space:pre-wrap}
+.note{font-size:13px;color:var(--muted);margin-top:16px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Smart Trash Bin</h1>
+    <div class="row">
+      <span class="status"><span class="dot" id="dot"></span><span id="statusText">Not connected</span></span>
+      <button id="connectBtn">Connect Arduino</button>
+      <button id="disconnectBtn" class="secondary hidden">Disconnect</button>
+    </div>
+  </header>
+
+  <div class="banner hidden" id="warning">
+    <span>⚠</span><span id="warningText">Trash is over the limit — please empty the bin.</span>
+  </div>
+
+  <div class="grid">
+    <!-- Lid -->
+    <div class="card">
+      <h2>Lid</h2>
+      <div class="big-value lid-state" id="lidState">–</div>
+      <div class="sub" id="lidReason">Waiting for data</div>
+      <div class="row" style="margin-top:14px">
+        <button class="big" id="openBtn" disabled>Open lid</button>
+        <button class="secondary" id="closeBtn" disabled>Close</button>
+      </div>
+    </div>
+
+    <!-- Hand sensor -->
+    <div class="card">
+      <h2>Hand sensor</h2>
+      <div class="big-value" id="handVal">–</div>
+      <div class="sub" style="margin-top:8px"><span class="pill" id="handPill">No hand</span></div>
+      <div class="sub" style="margin-top:8px">Opens automatically within <span id="handTrigTxt">20</span> cm</div>
+    </div>
+
+    <!-- Fill level -->
+    <div class="card">
+      <h2>Fill level</h2>
+      <div class="fill-wrap">
+        <div class="bin"><div class="level" id="level" style="height:0%"></div><div class="limit" id="limitLine"></div></div>
+        <div>
+          <div class="big-value" id="fillPct">–</div>
+          <div class="sub" id="fillCm">Trash surface: – cm from sensor</div>
+          <div class="sub">Limit: <span id="limitTxt">80</span>%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="card">
+    <h2>Settings</h2>
+    <div class="setting">
+      <label>Trash limit: <span class="val" id="limitVal">80</span>%</label>
+      <input type="range" id="limitInput" min="30" max="100" step="5" value="80">
+    </div>
+    <div class="setting">
+      <label>Bin depth (distance from fill sensor to bottom when empty)</label>
+      <div class="row">
+        <input type="number" id="depthInput" min="5" max="200" value="30"> cm
+        <button class="secondary" id="calibrateBtn" disabled>Calibrate — bin is empty now</button>
+      </div>
+    </div>
+    <div class="setting">
+      <label>Hand detection distance</label>
+      <div class="row">
+        <input type="number" id="handInput" min="3" max="100" value="20"> cm
+      </div>
+    </div>
+    <details>
+      <summary>Raw serial data</summary>
+      <pre id="log"></pre>
+    </details>
+  </div>
+
+  <p class="note">Use Chrome or Edge on a computer, and close the Arduino IDE Serial Monitor first. The bin opens automatically even when this page is closed.</p>
+</main>
+
+<script>
+const BAUD = 9600;
+const $ = id => document.getElementById(id);
+
+/* ---------- settings (saved in browser) ---------- */
+const settings = { limit: 80, depth: 30, hand: 20 };
+try { Object.assign(settings, JSON.parse(localStorage.getItem('binSettings') || '{}')); } catch (e) {}
+function saveSettings() { try { localStorage.setItem('binSettings', JSON.stringify(settings)); } catch (e) {} }
+
+$('limitInput').value = settings.limit;
+$('depthInput').value = settings.depth;
+$('handInput').value = settings.hand;
+
+function applySettingsUI() {
+  $('limitVal').textContent = settings.limit;
+  $('limitTxt').textContent = settings.limit;
+  $('handTrigTxt').textContent = settings.hand;
+  $('limitLine').style.bottom = settings.limit + '%';
+  render();
+}
+
+$('limitInput').oninput = e => { settings.limit = +e.target.value; saveSettings(); applySettingsUI(); };
+$('depthInput').onchange = e => {
+  const v = +e.target.value; if (v >= 5 && v <= 200) { settings.depth = v; saveSettings(); applySettingsUI(); }
+};
+$('handInput').onchange = e => {
+  const v = +e.target.value; if (v >= 3 && v <= 100) { settings.hand = v; saveSettings(); applySettingsUI(); send('H:' + v); }
+};
+$('calibrateBtn').onclick = () => {
+  if (state.fill > 0) {
+    settings.depth = Math.round(state.fill * 10) / 10;
+    $('depthInput').value = settings.depth;
+    saveSettings(); applySettingsUI();
+    log('Calibrated bin depth: ' + settings.depth + ' cm');
+  } else log('Calibration failed: no valid fill reading');
+};
+
+/* ---------- state + rendering ---------- */
+const state = { hand: -1, fill: -1, lid: null, manual: false };
+
+function render() {
+  // Lid
+  if (state.lid === null) { $('lidState').textContent = '–'; }
+  else {
+    $('lidState').textContent = state.lid ? 'Open' : 'Closed';
+    $('lidState').classList.toggle('open', state.lid);
+    $('lidReason').textContent = !state.lid ? 'Ready'
+      : (state.hand > 0 && state.hand <= settings.hand) ? 'Opened by hand detection'
+      : state.manual ? 'Opened by button' : 'Closing soon';
+  }
+
+  // Hand
+  const handNear = state.hand > 0 && state.hand <= settings.hand;
+  $('handVal').innerHTML = state.hand < 0 ? 'No object' : state.hand.toFixed(1) + ' <small>cm</small>';
+  $('handPill').textContent = handNear ? 'Hand detected' : 'No hand';
+  $('handPill').classList.toggle('on', handNear);
+
+  // Fill
+  let pct = null;
+  if (state.fill > 0) pct = Math.max(0, Math.min(100, (settings.depth - state.fill) / settings.depth * 100));
+  const over = pct !== null && pct >= settings.limit;
+  $('fillPct').textContent = pct === null ? '–' : Math.round(pct) + '%';
+  $('fillCm').textContent = state.fill > 0 ? `Trash surface: ${state.fill.toFixed(1)} cm from sensor` + (state.lid ? ' (paused while lid open)' : '') : 'No reading';
+  $('level').style.height = (pct || 0) + '%';
+  $('level').classList.toggle('over', over);
+
+  // Warning
+  $('warning').classList.toggle('hidden', !over);
+  if (over) $('warningText').textContent = `Trash is over the limit (${Math.round(pct)}% ≥ ${settings.limit}%) — please empty the bin.`;
+  document.title = over ? '⚠ Bin full — Smart Trash Bin' : 'Smart Trash Bin';
+}
+
+/* ---------- serial ---------- */
+let port = null, reader = null, keepReading = false, logLines = [];
+
+function log(t) {
+  logLines.push(t); if (logLines.length > 200) logLines = logLines.slice(-200);
+  $('log').textContent = logLines.join('\n'); $('log').scrollTop = $('log').scrollHeight;
+}
+
+function setConnected(on) {
+  $('dot').classList.toggle('on', on);
+  $('statusText').textContent = on ? 'Connected' : 'Not connected';
+  $('connectBtn').classList.toggle('hidden', on);
+  $('disconnectBtn').classList.toggle('hidden', !on);
+  ['openBtn', 'closeBtn', 'calibrateBtn'].forEach(id => $(id).disabled = !on);
+}
+
+async function send(text) {
+  if (!port || !port.writable) return;
+  const w = port.writable.getWriter();
+  try { await w.write(new TextEncoder().encode(text + '\n')); log('> ' + text); }
+  catch (e) { log('Send error: ' + e.message); }
+  finally { w.releaseLock(); }
+}
+
+function handleLine(line) {
+  if (!line) return;
+  log(line);
+  const p = line.split(',');
+  if (p[0] !== 'D' || p.length !== 4) return;
+  const hand = parseFloat(p[1]), fill = parseFloat(p[2]), lid = p[3].trim() === '1';
+  //const hand = parseFloat(p[0]), fill = parseFloat(p[1]);
+  if ([hand, fill].some(isNaN)) return;
+  if (!lid) state.manual = false;
+  Object.assign(state, { hand, fill, lid });
+  render();
+}
+
+async function connect() {
+  if (!('serial' in navigator)) { alert('Web Serial is not supported. Use Chrome or Edge on desktop.'); return; }
+  try { port = await navigator.serial.requestPort(); await port.open({ baudRate: BAUD }); }
+  catch (e) { log('Could not open port: ' + e.message); return; }
+  setConnected(true); log('--- connected ---');
+  keepReading = true; readLoop();
+  setTimeout(() => send('H:' + settings.hand), 1500);   // sync hand distance after board resets
+}
+
+async function readLoop() {
+  const dec = new TextDecoder(); let buf = '';
+  while (port && port.readable && keepReading) {
+    reader = port.readable.getReader();
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+            console.log("line: " + buf);
+           handleLine(buf.slice(0, i).trim());
+           buf = buf.slice(i + 1); 
+        }
+      }
+    } catch (e) { log('Read error: ' + e.message); }
+    finally { reader.releaseLock(); }
+  }
+  try { await port.close(); } catch (e) {}
+  port = null; setConnected(false); log('--- disconnected ---');
+}
+
+async function disconnect() { keepReading = false; if (reader) { try { await reader.cancel(); } catch (e) {} } }
+
+$('connectBtn').onclick = connect;
+$('disconnectBtn').onclick = disconnect;
+$('openBtn').onclick = () => { state.manual = true; send('O'); };
+$('closeBtn').onclick = () => send('C');
+if ('serial' in navigator) navigator.serial.addEventListener('disconnect', e => { if (e.target === port) disconnect(); });
+
+applySettingsUI();
+</script>
+</body>
+</html>
